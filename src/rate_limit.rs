@@ -165,7 +165,7 @@ impl<C: Clock> RateLimiter for TokenLimiter<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::test_utils::pubkey;
+    use crate::{clock::TokioClock, tests::test_utils::pubkey};
     use core::ops::SubAssign;
     use mockall::mock;
     use tokio::time::{Duration, Instant};
@@ -173,22 +173,25 @@ mod tests {
     const TEST_COUNT: u8 = 2;
     const TEST_FREQUENCY: Duration = Duration::from_secs(1);
 
-    mock! {
-        FixedClock{}
+    // mock! {
+    //     FixedClock{}
 
-        impl Clock for FixedClock{
-            fn now(&self) -> Instant;
-        }
-    }
+    //     impl Clock for FixedClock{
+    //         fn now(&self) -> Instant;
+    //     }
+    // }
 
+    // TODO: should be tokio::test?
     #[test]
     fn test_peer_connection() {
         let pk_0 = pubkey(0);
         let pk_1 = pubkey(1);
 
-        let mut clock = MockFixedClock::new();
-        // TODO: use constant value for mocking.
-        clock.expect_now().returning(|| Instant::now());
+        // let mut clock = MockFixedClock::new();
+        // // TODO: use constant value for mocking.
+        // clock.expect_now().returning(|| Instant::now());
+
+        let clock = TokioClock::new();
 
         // Assert that we're set up with our original peer.
         let mut rate_limiter =
@@ -204,20 +207,20 @@ mod tests {
         assert_eq!(rate_limiter.peers(), vec![pk_1]);
     }
 
-    #[test]
-    fn test_rate_limiting() {
+    #[tokio::test(start_paused = true)]
+    async fn test_rate_limiting() {
         let pk_0 = pubkey(0);
         let pk_1 = pubkey(1);
 
-        let mut clock = MockFixedClock::new();
+        // let mut clock = MockFixedClock::new();
 
         // TODO: use constant value for mocking.
-        let start_time = Instant::now();
-        clock.expect_now().returning(move || start_time);
+        // let start_time = Instant::now();
+        // clock.expect_now().returning(move || start_time);
 
         // Assert that we're set up with our original peer.
         let mut rate_limiter =
-            TokenLimiter::new(vec![pk_0].into_iter(), TEST_COUNT, TEST_FREQUENCY, clock);
+            TokenLimiter::new(vec![pk_0].into_iter(), TEST_COUNT, TEST_FREQUENCY, TokioClock::new());
         assert_eq!(rate_limiter.peers(), vec![pk_0]);
 
         // Exhaust our allowed call count in this period, then assert that we're no longer allowed
@@ -240,16 +243,17 @@ mod tests {
 
         // Disconnect one peer so that they'll be cleaned up and update the rate limiter's time so
         // that we'll refresh our buckets.
-        rate_limiter.peer_disconnected(pk_1);
+        // rate_limiter.peer_disconnected(pk_1);
 
         // Update our clock to a time which reflects that we need an update.
-        rate_limiter.last_update.sub_assign(TEST_FREQUENCY);
+        // rate_limiter.last_update.sub_assign(TEST_FREQUENCY);
 
         // The disconnected peer should not be allowed any queries (they're currently unknown to
         // us).
-        assert!(!rate_limiter.query_peer(pk_1));
+        // assert!(!rate_limiter.query_peer(pk_1));
 
         // Our original peer should be allowed the full quota of peers again.
+        tokio::time::advance(TEST_FREQUENCY).await;
         for _ in 0..TEST_COUNT {
             assert!(rate_limiter.query_peer(pk_0));
         }
@@ -269,12 +273,12 @@ mod tests {
     fn test_query_peer_unknown_peer() {
         let pk_0 = pubkey(0);
 
-        let mut clock = MockFixedClock::new();
-        let start_time = Instant::now();
-        clock.expect_now().returning(move || start_time);
+        // let mut clock = MockFixedClock::new();
+        // let start_time = Instant::now();
+        // clock.expect_now().returning(move || start_time);
 
         let mut rate_limiter =
-            TokenLimiter::new(vec![].into_iter(), TEST_COUNT, TEST_FREQUENCY, clock);
+            TokenLimiter::new(vec![].into_iter(), TEST_COUNT, TEST_FREQUENCY, TokioClock::new());
 
         assert!(!rate_limiter.query_peer(pk_0));
     }

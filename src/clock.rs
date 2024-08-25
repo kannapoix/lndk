@@ -1,3 +1,6 @@
+// #[cfg(test)]
+// pub use test::Instant;
+// #[cfg(not(test))]
 use tokio::time::Instant;
 
 pub trait Clock {
